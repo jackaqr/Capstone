@@ -57,6 +57,7 @@ from sionna.mapping import Constellation
 SIMPLE_SIM = True   # reduced simulation time for simple simulation if set to True
 if SIMPLE_SIM:
     batch_size = int(1e1)  # number of OFDM frames to be analyzed per batch
+    batch_size = int(2)  # number of OFDM frames to be analyzed per batch
     num_iter = 5  # number of Monte Carlo Iterations (total number of Monte Carlo trials is num_iter*batch_size)
     num_steps = 6
     tf.config.run_functions_eagerly(True)   # run eagerly for better debugging
@@ -72,15 +73,30 @@ ebno_db_min_cest = -10
 ebno_db_max_cest = 10
 
 
-NUM_OFDM_SYMBOLS = 14
-FFT_SIZE = 12*4 # 4 PRBs
-SUBCARRIER_SPACING = 30e3 # Hz
-CARRIER_FREQUENCY = 3.5e9 # Hz
-SPEED = 3. # m/s
-num_bits_per_symbol = 4 # 16 QAM
-n_ue = 4 # 4 UEs
-NUM_RX_ANT = 16 # 16 BS antennas
-num_pilot_symbols = 2
+SIMPLE_DATA = False
+if SIMPLE_DATA:
+    NUM_OFDM_SYMBOLS = 4
+    #FFT_SIZE = 12*4 # 4 PRBs
+    FFT_SIZE = 12 # 4 PRBs
+    SUBCARRIER_SPACING = 30e3 # Hz
+    CARRIER_FREQUENCY = 3.5e9 # Hz
+    SPEED = 3. # m/s
+    num_bits_per_symbol = 4 # 16 QAM
+    #n_ue = 4 # 4 UEs
+    n_ue = 1 # 4 UEs
+    NUM_RX_ANT = 4 # 16 BS antennas
+    num_pilot_symbols = 2
+else:
+    NUM_OFDM_SYMBOLS = 14
+    FFT_SIZE = 12*4 # 4 PRBs
+    SUBCARRIER_SPACING = 30e3 # Hz
+    CARRIER_FREQUENCY = 3.5e9 # Hz
+    SPEED = 3. # m/s
+    num_bits_per_symbol = 4 # 16 QAM
+    n_ue = 4 # 4 UEs
+    NUM_RX_ANT = 16 # 16 BS antennas
+    num_pilot_symbols = 2
+
 
 # The user terminals (UTs) are equipped with a single antenna
 # with vertial polarization.
@@ -116,7 +132,7 @@ rx_tx_association = np.ones([1, n_ue])
 sm = StreamManagement(rx_tx_association, 1)
 
 # Parameterize the OFDM channel
-rg = ResourceGrid(num_ofdm_symbols=NUM_OFDM_SYMBOLS, pilot_ofdm_symbol_indices = [2, 11],
+rg = ResourceGrid(num_ofdm_symbols=NUM_OFDM_SYMBOLS, pilot_ofdm_symbol_indices = [2, 3],
                   fft_size=FFT_SIZE, num_tx=n_ue,
                   pilot_pattern = "kronecker",
                   subcarrier_spacing=SUBCARRIER_SPACING)
@@ -223,14 +239,27 @@ class IddModel(Model):
         # Modulation
         x = self._mapper(c)
         x_rg = self._rg_mapper(x)
-        print(f"shape of x_rg: {tf.shape(x_rg)}")
+
         ######################################
         ## Channel
         # A batch of new channel realizations is sampled and applied at every inference
         no_ = expand_to_rank(no, tf.rank(x_rg))
         y, h = self._channel([x_rg, no_])
-        print(f"shape of y: {tf.shape(y)}")
- 
+        print(no)
+        #print("b:",b)
+        #print("c:",c)
+        #print("x:",x)
+        #print("x_rg:",x_rg)
+        #print("x_rg+1", tf.expand_dims(x_rg,axis = -1))
+        #print("x_rg+2", tf.expand_dims(tf.expand_dims(x_rg,axis = -1),axis = -1))
+        #print("x_rg/2",x_rg/2)
+        #print("x_rg/c2", x_rg / tf.complex(2.0, 0.0))
+        """
+        print(f"1 shape of y: {tf.shape(y)}")
+        print("batch size, num_tx_ant, num_rx_ant，num_ofdm_sym, num_eff_subcarriers")
+        """
+        #print(y)
+        
         ######################################
         ## Receiver
         if self._perfect_csi_rayleigh:
@@ -249,8 +278,8 @@ class IddModel(Model):
             [llr_dec, msg_vn] = self._siso_decoder((llr_ch, msg_vn))
             # forward a posteriori information from decoder
             #print(f"shape of llr_dec: {tf.shape(llr_dec)}")
-            print(f"shape of h: {tf.shape(h_hat)}")
-
+            print(f"2 shape of h: {tf.shape(h_hat)}")
+            
             #llr_ach = self._siso_detector((y, h_hat, llr_dec, chan_est_var, no))
             # forward extrinsic information
             
@@ -258,7 +287,7 @@ class IddModel(Model):
             def idd_iter(llr_ch, msg_vn, it):
                 [llr_dec, msg_vn] = self._siso_decoder([llr_ch, msg_vn])
                 # forward a posteriori information from decoder
-                print("shape of llr_dec", llr_dec.shape)
+                print("3 shape of llr_dec", llr_dec.shape)
                 llr_ch = self._siso_detector((y, h_hat, llr_dec, chan_est_var, no))
                 # forward extrinsic information from detector
 

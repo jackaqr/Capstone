@@ -169,11 +169,12 @@ class BPICDetector_(Layer):
 
         #    计算星座点的平均功率
         # Calculate average power of constellation points (Es)
-
         constellation_points = tf.convert_to_tensor(constellation.points, dtype=tf.complex64)
         energies = tf.math.abs(constellation_points) ** 2
         self.es = tf.complex(tf.reduce_mean(energies), tf.constant(0.0, dtype=tf.float32))
-
+        
+        #print("es",tf.reduce_mean(energies))
+        #print("es",self.es)
 
 
 
@@ -238,26 +239,32 @@ class BPICDetector_(Layer):
         # Whiten channel
         # y : [..., M]
         # s : [..., M, M]
-        print(f"shape of h(after_preprocess): {tf.shape(h)}")
-        print(f"shape of y(after_preprocess): {tf.shape(y)}")
-        print(f"shape of No(after_preprocess): {tf.shape(No)}")
+        print(f"4 shape of h(after_preprocess): {tf.shape(h)}")
+        print(f"5 shape of y(after_preprocess): {tf.shape(y)}")
+        print(f"6 shape of No(after_preprocess): {tf.shape(No)}")
+        print(No)
         y, h = whiten_channel(y, h, No, return_s=False)  # pylint: disable=unbalanced-tuple-unpacking
-        print(f"shape of y(whiten): {tf.shape(y)}")
-        print("shape of h(whiten):", h.shape)
 
 
+        Ht = tf.linalg.adjoint(h)
+        #print("7 shape of h(whiten):", h.shape)
+        #print("8 shape of Ht:", Ht.shape)
+        #print(f"9 shape of y(whiten): {tf.shape(y)}")
+        #print(y)
+        #print("10 shape of Hty",tf.linalg.matvec(h, y, adjoint_a=True).shape)
         # matched filtering of y
         # [..., K, 1]
         Hty = insert_dims(tf.linalg.matvec(h, y, adjoint_a=True),
                             num_dims=1, axis=-1)
-        print("shape of Hty(mf):", Hty.shape)
+        #print("11 shape of Hty(mf):", Hty.shape)
 
 
         
 
         # 获取x_num, 即发射信号的维度
-        y_num = tf.shape(h)[-2]
+        #y_num = tf.shape(h)[-2]
         x_num = tf.shape(h)[-1]
+        #print(x_num)
 
         # Compute a priori LLRs
         if self._output == "symbol":
@@ -269,27 +276,31 @@ class BPICDetector_(Layer):
 
 
 
-        print(f"shape of llr_a: {tf.shape(llr_a)}")
+        print(f"12 shape of llr_a: {tf.shape(llr_a)}")
 
         x_logits = self._llr_2_symbol_logits(llr_a)
         #print(f"shape of x_logits: {tf.shape(x_logits)}")
         x_dsc, var_x = self._symbol_logits_2_moments(x_logits)
         
-        print(f"shape of x_dsc: {tf.shape(x_dsc)}")
+        print(f"13 shape of x_dsc: {tf.shape(x_dsc)}")
         
         
         
         # Calculating the conjugate transpose
-        Ht = tf.linalg.adjoint(h)
+       
         # matrix multiplication
         HtH = tf.matmul(Ht, h)
-        print("shape of HtH(mf):", HtH.shape)
-        print("shape of Ht(mf):", Ht.shape)
-        
-        print("shape of No", No.shape)
-        print("dtype of es", self.es.dtype)
-        print("shape of x_eye",tf.eye(x_num, dtype=tf.complex64).shape)
-        print("shape of No/es", (No/self.es).shape)
+        #print(HtH)
+        #print(h)
+        #print(Ht)
+        print("shape of H", h.shape)
+        print("14 shape of Ht(mf):", Ht.shape)
+        print("15 shape of HtH(mf):", HtH.shape)
+        print("16 shape of No", No.shape)
+        print("17 dtype of es", self.es.dtype)
+        print("17 shape of es", self.es)
+        #print("18 shape of x_eye",tf.eye(x_num, dtype=tf.complex64).shape)
+        print("19 shape of No/es", (No/self.es).shape)
         
         # Creating unit matrices and calculating non-diagonal parts
         identity_matrix = tf.eye(x_num, dtype=tf.complex64)
@@ -298,11 +309,25 @@ class BPICDetector_(Layer):
         HtH_off_sqr = tf.square(HtH_off)
         # Compute the inverse matrix
         mrc_mat = tf.linalg.diag(1 / tf.linalg.diag_part(HtH))
-    
+        
         # BSO - mean - 1st iteration
         bso_zigma_1 = tf.eye(x_num, dtype=tf.complex64)
+       
+        identity_matrix = tf.eye(tf.shape(No)[-1], dtype = tf.complex64)
+        shape_a = tf.shape(No)
+        identity_matrix = tf.reshape(identity_matrix, [1] * (len(shape_a) - 2) + [shape_a[-2], shape_a[-1]])
+        print(identity_matrix.shape)
+        
         if self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_MMSE:
-            bso_zigma_1 = tf.linalg.inv(HtH + No/self.es * tf.eye(x_num, dtype=tf.complex64))
+            #print("19 shape of No/es", (No/self.es).shape)
+            #print("shape of eye",identity_matrix.shape)
+            n = tf.matmul(No/self.es , identity_matrix)
+            #print("shape of No/es*eye", n.shape)
+            #print(No/self.es)
+            #print(identity_matrix)
+            #print(n)
+            #print(HtH)
+            bso_zigma_1 = tf.linalg.inv(HtH + tf.matmul(No/self.es , identity_matrix)) 
         elif self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_MRC:
             bso_zigma_1 = mrc_mat
         elif self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_ZF:
