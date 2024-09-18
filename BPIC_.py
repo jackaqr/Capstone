@@ -129,14 +129,18 @@ class BPICDetector_(Layer):
         self._realdtype = dtype.real_dtype
         self._demapping_method = demapping_method
         self._hard_out = hard_out
+       
 
         # Create constellation object
-        num_bits_per_symbol=4
+        
         self._constellation = Constellation.create_or_check_constellation(
             constellation_type,
             num_bits_per_symbol,
             constellation,
             dtype=dtype)
+        #print("C_type",self._constellation.points)
+        #self._constellation.show()
+        
 
 
         # Soft symbol mapping
@@ -172,7 +176,7 @@ class BPICDetector_(Layer):
         constellation_points = tf.convert_to_tensor(constellation.points, dtype=tf.complex64)
         energies = tf.math.abs(constellation_points) ** 2
         self.es = tf.complex(tf.reduce_mean(energies), tf.constant(0.0, dtype=tf.float32))
-        
+        #self.es = tf.reduce_mean(energies)
         #print("es",tf.reduce_mean(energies))
         #print("es",self.es)
 
@@ -242,21 +246,41 @@ class BPICDetector_(Layer):
         print(f"4 shape of h(after_preprocess): {tf.shape(h)}")
         print(f"5 shape of y(after_preprocess): {tf.shape(y)}")
         print(f"6 shape of No(after_preprocess): {tf.shape(No)}")
-        print(No)
+        #print(No)
         y, h = whiten_channel(y, h, No, return_s=False)  # pylint: disable=unbalanced-tuple-unpacking
 
-
+        Hty = insert_dims(tf.linalg.matvec(h, y, adjoint_a=True),num_dims=1, axis=-1)
+        #print(Hty)
+        
+        
+        print("11 shape of Hty(mf):", Hty.shape)
         Ht = tf.linalg.adjoint(h)
-        #print("7 shape of h(whiten):", h.shape)
-        #print("8 shape of Ht:", Ht.shape)
+        #H = tf.expand_dims(h, axis = -1)
+        HtH = tf.matmul(Ht, h)
+        #print(h)
+        #print(Ht)
+        #print(y)
+        print(Ht.shape)
+        
+        y = tf.expand_dims(y, axis = -1)
+        Hty = tf.matmul(Ht, y)
+        #print("11 shape of Hty(mf):", Hty.shape)
+        #print(h)
+        print("7 shape of h(whiten):", h.shape)
+        print("8 shape of Ht:", Ht.shape)
+        #HtH = insert_dims(tf.linalg.matvec(h, h, adjoint_a=True),num_dims=1, axis=-1)
+        
         #print(f"9 shape of y(whiten): {tf.shape(y)}")
         #print(y)
         #print("10 shape of Hty",tf.linalg.matvec(h, y, adjoint_a=True).shape)
+        
+        
         # matched filtering of y
         # [..., K, 1]
-        Hty = insert_dims(tf.linalg.matvec(h, y, adjoint_a=True),
-                            num_dims=1, axis=-1)
-        #print("11 shape of Hty(mf):", Hty.shape)
+        #Hty = insert_dims(tf.linalg.matvec(h, y, adjoint_a=True),num_dims=1, axis=-1)
+        
+        print("11 shape of Hty:", Hty.shape)
+        #print(Hty)
 
 
         
@@ -277,57 +301,59 @@ class BPICDetector_(Layer):
 
 
         print(f"12 shape of llr_a: {tf.shape(llr_a)}")
+        
+        #print(llr_a)
 
         x_logits = self._llr_2_symbol_logits(llr_a)
         #print(f"shape of x_logits: {tf.shape(x_logits)}")
         x_dsc, var_x = self._symbol_logits_2_moments(x_logits)
-        
+        #print(x_dsc)
         print(f"13 shape of x_dsc: {tf.shape(x_dsc)}")
         
-        
-        
         # Calculating the conjugate transpose
-       
         # matrix multiplication
-        HtH = tf.matmul(Ht, h)
-        #print(HtH)
-        #print(h)
-        #print(Ht)
+
         print("shape of H", h.shape)
         print("14 shape of Ht(mf):", Ht.shape)
         print("15 shape of HtH(mf):", HtH.shape)
-        print("16 shape of No", No.shape)
-        print("17 dtype of es", self.es.dtype)
-        print("17 shape of es", self.es)
+        #print("16 shape of No", No.shape)
+        #print("17 dtype of es", self.es.dtype)
+        #print("17 shape of es", self.es)
         #print("18 shape of x_eye",tf.eye(x_num, dtype=tf.complex64).shape)
-        print("19 shape of No/es", (No/self.es).shape)
+        #print("19 shape of No/es", (No/self.es).shape)
         
-        # Creating unit matrices and calculating non-diagonal parts
-        identity_matrix = tf.eye(x_num, dtype=tf.complex64)
-        HtH_off = tf.multiply(tf.subtract(tf.add(identity_matrix, 1), tf.multiply(identity_matrix, 2)), HtH)
+        
+        
+        
+        
         # Square the non-diagonal portion
-        HtH_off_sqr = tf.square(HtH_off)
+        
         # Compute the inverse matrix
         mrc_mat = tf.linalg.diag(1 / tf.linalg.diag_part(HtH))
         
         # BSO - mean - 1st iteration
         bso_zigma_1 = tf.eye(x_num, dtype=tf.complex64)
        
-        identity_matrix = tf.eye(tf.shape(No)[-1], dtype = tf.complex64)
-        shape_a = tf.shape(No)
+        
+       
+        identity_matrix = tf.eye(tf.shape(HtH)[-1], dtype = tf.complex64)
+        shape_a = tf.shape(HtH)
         identity_matrix = tf.reshape(identity_matrix, [1] * (len(shape_a) - 2) + [shape_a[-2], shape_a[-1]])
-        print(identity_matrix.shape)
+        #print(identity_matrix.shape)
+        
+        # Creating unit matrices and calculating non-diagonal parts
+        HtH_off = tf.multiply(tf.subtract(tf.add(identity_matrix, 1), tf.multiply(identity_matrix, 2)), HtH)
+
+        # Square the non-diagonal portion
+        HtH_off_sqr = tf.square(HtH_off)
+        
+        
+        #No = tf.math.real(No[0, 0, 1, 1, 1, 1])
+        No = No[0, 0, 1, 1, 1, 1]
+        #print(No)
         
         if self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_MMSE:
-            #print("19 shape of No/es", (No/self.es).shape)
-            #print("shape of eye",identity_matrix.shape)
-            n = tf.matmul(No/self.es , identity_matrix)
-            #print("shape of No/es*eye", n.shape)
-            #print(No/self.es)
-            #print(identity_matrix)
-            #print(n)
-            #print(HtH)
-            bso_zigma_1 = tf.linalg.inv(HtH + tf.matmul(No/self.es , identity_matrix)) 
+            bso_zigma_1 = tf.linalg.inv(HtH + No/self.es * identity_matrix)
         elif self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_MRC:
             bso_zigma_1 = mrc_mat
         elif self.bso_mean_init == BPICDetector_.BSO_MEAN_INIT_ZF:
@@ -341,7 +367,7 @@ class BPICDetector_(Layer):
         # BSO - variance
         bso_var_mat = tf.expand_dims(tf.math.reciprocal(tf.linalg.diag_part(HtH)), -1)
         if self.bso_var_cal == BPICDetector_.BSO_VAR_CAL_MMSE:
-            bso_var_mat = tf.expand_dims(tf.linalg.diag_part(tf.linalg.inv(HtH + No/self.es * tf.eye(x_num, dtype=tf.complex64))), -1)
+            bso_var_mat = tf.expand_dims(tf.linalg.diag_part(tf.linalg.inv(HtH + No/self.es * identity_matrix), -1))
         elif self.bso_var_cal == BPICDetector_.BSO_VAR_CAL_ZF:
             bso_var_mat = tf.expand_dims(tf.linalg.diag_part(tf.linalg.inv(HtH)), -1)
         bso_var_mat_sqr = tf.square(bso_var_mat)
@@ -353,8 +379,7 @@ class BPICDetector_(Layer):
         elif self.dsc_ise == BPICDetector_.DSC_ISE_ZF:
             dsc_w = tf.linalg.inv(HtH)
         elif self.dsc_ise == BPICDetector_.DSC_ISE_MMSE:
-            dsc_w = tf.linalg.inv(HtH + No/self.es * tf.eye(x_num, dtype=tf.complex64))
-
+            dsc_w = tf.linalg.inv(HtH + No/self.es * identity_matrix)
 
         # Iterative detection initialization
         #x_dsc = tf.zeros([x_num, 1], dtype=tf.float32)
@@ -364,27 +389,59 @@ class BPICDetector_(Layer):
         x_bse_prev = None
         v_bse_prev = None
 
-
-
         # 1st iteration - use MMSE PIC detector
         # BPIC takes in a priori LLRs
 
-
         # BSO
         # BSO - mean
-        if it == 0:
-            x_bso = bso_zigma_1@(Hty - tf.matmul(HtH_off, x_dsc));
-        else:
-            x_bso = bso_zigma_others@(Hty - tf.matmul(HtH_off, x_dsc));
+        x_bso = bso_zigma_1@(Hty - tf.matmul(HtH_off, tf.expand_dims(x_dsc, axis = -1)));  #给x_dsc添加一个维度，以进行乘法运算
+        
+        #x_bso = bso_zigma_others@(Hty - tf.matmul(HtH_off, x_dsc));
 
         if self.bso_var == BPICDetector_.BSO_VAR_APPRO:
             v_bso = No * bso_var_mat
+            #print(v_bso)
         elif self.bso_var == BPICDetector_.BSO_VAR_ACCUR:
             v_bso = No * bso_var_mat + tf.matmul(tf.matmul(HtH_off_sqr, v_dsc), bso_var_mat_sqr)
-
-        vbso = tf.maximum(v_bso, self.min_var)  # 使用tf.maximum确保variance不低于最小值
+        
+        
+        real_part = tf.clip_by_value(tf.math.real(v_bso), clip_value_min=tf.math.real(self.min_var), clip_value_max=float('inf'))
+        imag_part = tf.clip_by_value(tf.math.imag(v_bso), clip_value_min=tf.math.imag(self.min_var), clip_value_max=float('inf'))
+        # 重新组合实部和虚部回复数
+        v_bso = tf.complex(real_part, imag_part)
+        
+        
+        
+        
+        
         # BSE - 使用高斯分布估计 P(x|y)
-        pxy_pdf_exp_power = -1 / (2 * v_bso) * tf.square(tf.abs(tf.tile(tf.expand_dims(x_bso, -1), [1, 1, self.constellation_len]) - tf.tile(self.constellation[None, None, :], [x_num, 1, 1])))
+        #print(x_bso)
+        #expanded_constellation = tf.reshape(constellation, [1, 1, 1, 1, 16, 1])
+        #expanded_constellation = tf.reshape(self._constellation.points, [1, 1, 1, 1, 1, 16])
+        #print(expanded_constellation)
+        #print(x_bso - expanded_constellation)
+    
+        #pxy_pdf_exp_power = -1 / (2 * v_bso) * tf.square(tf.abs(x_bso - expanded_constellation))
+        
+        
+        x_num = tf.shape(x_bso)[0]
+        
+        constellation_len = self._constellation.points.shape[0]
+        
+        
+        x_bso_tiled = tf.tile(tf.reshape(x_bso, [x_num, 1]), [1, constellation_len])
+        # 重复 constellation 至 (x_num, 1)
+        constellation_tiled = tf.tile(tf.reshape(self.constellation, [1, constellation_len]), [x_num, 1])
+
+        # 计算差的平方
+        squared_diff = tf.square(x_bso_tiled - constellation_tiled)
+        
+        # 计算高斯函数的指数部分
+        pxyPdfExpPower = -1 / (2 * v_bso) * squared_diff
+        
+        
+        
+        
         # BSE - 让每一行最大功率为 0
         pxypdf_exp_norm_power = pxy_pdf_exp_power - tf.expand_dims(tf.reduce_max(pxy_pdf_exp_power, axis=-1), axis=-1)
         pxy_pdf = tf.exp(pxypdf_exp_norm_power)

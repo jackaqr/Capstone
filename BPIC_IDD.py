@@ -73,17 +73,17 @@ ebno_db_min_cest = -10
 ebno_db_max_cest = 10
 
 
-SIMPLE_DATA = False
+SIMPLE_DATA = True
 if SIMPLE_DATA:
     NUM_OFDM_SYMBOLS = 4
     #FFT_SIZE = 12*4 # 4 PRBs
-    FFT_SIZE = 12 # 4 PRBs
+    FFT_SIZE = 6 # 4 PRBs
     SUBCARRIER_SPACING = 30e3 # Hz
     CARRIER_FREQUENCY = 3.5e9 # Hz
     SPEED = 3. # m/s
     num_bits_per_symbol = 4 # 16 QAM
     #n_ue = 4 # 4 UEs
-    n_ue = 1 # 4 UEs
+    n_ue = 2 # 4 UEs
     NUM_RX_ANT = 4 # 16 BS antennas
     num_pilot_symbols = 2
 else:
@@ -205,7 +205,7 @@ class IddModel(Model):
                                                   hard_out=False)
         elif _siso_detector == 'BPIC':
             self._siso_detector = BPICDetector(output="bit", resource_grid=rg, stream_management=sm,
-                                                  demapping_method='maxlog', constellation=constellation, num_iter=1,
+                                                  demapping_method='maxlog', constellation=constellation, num_bits_per_symbol=num_bits_per_symbol, num_iter=1,
                                                   hard_out=False)
             
         self._siso_decoder = LDPC5GDecoder(self._encoder, return_infobits=False,
