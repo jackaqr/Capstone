@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Fri Sep 27 01:28:18 2024
+
+@author: Xuanzi
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Sat Sep  7 15:50:28 2024
 
 @author: Xuanzi
@@ -53,11 +60,11 @@ from sionna.mimo import KBestDetector as KBestDetector_
 from sionna.mimo import EPDetector as EPDetector_
 from sionna.mimo import MMSEPICDetector as MMSEPICDetector_
 from sionna.mapping import Constellation
-from detection_b import OFDMDetector_b,OFDMDetectorWithPrior_b
+from detection_0 import OFDMDetector_0,OFDMDetectorWithPrior_0
 
-from BPIC_ import BPICDetector_ 
+from BPIC_0 import BPICDetector_0 
 
-class BPICDetector(OFDMDetectorWithPrior_b):
+class BPICDetector0(OFDMDetectorWithPrior_0):
 
 
     def __init__(self,
@@ -113,7 +120,7 @@ class BPICDetector(OFDMDetectorWithPrior_b):
 
         
         # Instantiate the EP detector
-        detector = BPICDetector_(output=output,
+        detector = BPICDetector_0(output=output,
                                     demapping_method=demapping_method,
                                     num_iter=num_iter,
                                     constellation_type=constellation_type,
