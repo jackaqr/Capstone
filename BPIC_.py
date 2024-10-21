@@ -320,14 +320,6 @@ class BPICDetector_(Layer):
         
         # 1st iteration - use MMSE PIC detector
         # BPIC takes in a priori LLRs
-
-        # BSO
-        # BSO - mean
-        #if it == 0:
-        #    x_bso = bso_zigma_1@(Hty - tf.matmul(HtH_off, tf.expand_dims(x_dsc, axis = -1)));  #给x_dsc添加一个维度，以进行乘法运算
-        #else:
-        #    print("bso_zigma_others")
-        #x_bso = bso_zigma_others@(Hty - tf.matmul(HtH_off, tf.expand_dims(x_dsc, axis = -1)));  #给x_dsc添加一个维度，以进行乘法运算  hao 63
         i = 0
         for i in range(internal_it):
             
@@ -337,45 +329,42 @@ class BPICDetector_(Layer):
             elif self.bso_var == BPICDetector_.BSO_VAR_ACCUR:
                 #v_bso = No * bso_var_mat + tf.matmul(tf.matmul(HtH_off_sqr, v_dsc), bso_var_mat_sqr)
                 v_bso = No * bso_var_mat + tf.matmul(HtH_off_sqr, v_dsc_prev) * bso_var_mat_sqr  # hao 59
-            
 
-            # BSE - 使用高斯分布估计 P(x|y)
-        
-            #result_tensor = tf.expand_dims(tf.reduce_sum(x_bso - self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:], axis=-1), -1)  # hao 19
-            result_tensor = abs(self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:] - x_bso)     # 10.4
-    
+            # BSE - Estimate P(x|y) using Gaussian distribution 使用高斯分布估计 P(x|y)
+            #result_tensor = tf.expand_dims(tf.reduce_sum(x_bso - self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:], axis=-1),axis = -1)   #hao 19
+            result_tensor = abs(self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:] - x_bso) # 10.4   # hao 19
             # 计算差的平方
-            squared_diff = tf.cast(tf.square(result_tensor), dtype = tf.complex64)   # hao 20
-            # 计算高斯函数的指数部分
-            pxy_pdf_exp_power = -1 / (2 * v_bso) * squared_diff  # hao 21
-            
-            # BSE - 让每一行最大功率为 0   # hao 22
-            # 提取原数组的实部和虚部
+            #squared_diff = tf.square(result_tensor)
+            squared_diff = tf.cast(tf.square(result_tensor), dtype = tf.complex64)    # hao 20
+            # Compute the exponential part of the Gaussian function 计算高斯函数的指数部分
+            # xinwei 229
+            pxy_pdf_exp_power = -1 / (2 * v_bso) * squared_diff   # hao 21
+        
+            # BSE - Let each row have a maximum power of 0  让每一行最大功率为 0  # hao 22
+            #pxypdf_exp_norm_power = pxy_pdf_exp_power - tf.expand_dims(tf.reduce_max(pxy_pdf_exp_power, axis=-1), axis=-1)
             real_part = tf.math.real(pxy_pdf_exp_power)
             imag_part = tf.math.imag(pxy_pdf_exp_power)
-            
-            # 计算每一行的最大值，并在相同的维度上扩展这个最大值
+            # Calculate the maximum value for each row and extend this maximum in the same dimension  计算每一行的最大值，并在同一维度中扩展该最大值
             max_real_indices = tf.argmax(real_part, axis=-1)
             max_complex_values = tf.gather(pxy_pdf_exp_power, max_real_indices, batch_dims=len(pxy_pdf_exp_power.shape) - 1)
-               
-            pxypdf_exp_norm_power = pxy_pdf_exp_power - tf.expand_dims(max_complex_values,axis=-1)   #hao 22
+            pxypdf_exp_norm_power = pxy_pdf_exp_power - tf.expand_dims(max_complex_values,axis=-1)
             
-            pxy_pdf = tf.exp(pxypdf_exp_norm_power)    # hao 23
+            pxy_pdf = tf.exp(pxypdf_exp_norm_power)   # hao 23
             
-            # BSE - 计算每一个可能的 x 的系数，使得所有的和为1
-            pxy_pdf_coeff = tf.expand_dims(1. / tf.reduce_sum(pxy_pdf, axis=-1), -1)   # hao 24   (np.expand_dims(np.sum(p_y_x, axis=2),2))
+            # BSE - Calculate the coefficients of every possible x such that all sum to 1  计算每个可能 x 的系数，使所有系数之和为 1
+            pxy_pdf_coeff = tf.expand_dims(1. / tf.reduce_sum(pxy_pdf, axis=-1), -1)  # hao 24   (np.expand_dims(np.sum(p_y_x, axis=2),2))
             #pxy_pdf_coeff = tf.tile(pxy_pdf_coeff, [1, self.constellation_len])
-            # BSE - PDF 标准化
+            # BSE - PDF standardisation  标准化
             pxy_pdf_norm = pxy_pdf_coeff * pxy_pdf    # hao 24  calculate_pyx
             
-            # BSE - 计算均值和方差
+            # BSE - Calculate mean and variance 计算均值和方差
             x_bse = tf.expand_dims(tf.reduce_sum(pxy_pdf_norm * self._constellation.points, axis=-1), -1)   # hao 9  hao 10
-    
+
             #x_bse_mat = tf.tile(x_bse, [1, self.constellation_len])
-            v_bse_sqr = tf.expand_dims(tf.square(abs(self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:] - x_bse)),axis = -1)    # hao 11
+            v_bse_sqr = tf.expand_dims(tf.square(abs(self._constellation.points[tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis, tf.newaxis,:] - x_bse)),axis = -1)  # 10.4   # hao 11
             v_bse_sqr_c = tf.reduce_sum(tf.squeeze(tf.cast(v_bse_sqr, dtype = tf.complex64),axis=-1)*pxy_pdf_norm,axis=-1)
             v_bse = tf.expand_dims(v_bse_sqr_c,axis=-1)   # 10.2
-        
+            
             # DSC
             # DSC - error
             
